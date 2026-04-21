@@ -2,3 +2,6 @@
 __pycache__/
 *.pyc
 .DS_Store
+
+# 로컬 설정 파일 (토큰/비밀번호 포함 — 절대 커밋 금지)
+~/.website_monitor_config.json

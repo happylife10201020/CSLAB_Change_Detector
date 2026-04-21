@@ -1,50 +1,26 @@
 #!/usr/bin/env python3
 """
-Website Change Monitor — Discord 봇 버전
-새 게시물 / 항목 / 하이퍼링크(파일 포함) 추가를 감지하여 Discord 봇으로 알림
+Website Change Monitor — GitHub Actions 버전
+새 게시물 / 항목 / 하이퍼링크(파일 포함) 추가를 감지하여 Discord로 알림
 """
 
 import hashlib
 import json
-import subprocess
+import os
 import sys
-import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
-try:
-    import requests
-    from bs4 import BeautifulSoup
-except ImportError:
-    print("패키지 설치 중...")
-    subprocess.run([sys.executable, "-m", "pip", "install", "requests", "beautifulsoup4"], check=True)
-    import requests
-    from bs4 import BeautifulSoup
-
-try:
-    import discord
-    from discord.ext import tasks
-except ImportError:
-    print("discord.py 설치 중...")
-    subprocess.run([sys.executable, "-m", "pip", "install", "discord.py"], check=True)
-    import discord
-    from discord.ext import tasks
+import requests
+from bs4 import BeautifulSoup
 
 
 # ── 경로 ────────────────────────────────────────────────────────────────────
 
-CONFIG_FILE = Path.home() / ".website_monitor_config.json"
-STATE_FILE  = Path.home() / ".website_monitor_state.json"
-
-DEFAULT_CONFIG = {
-    "interval_seconds": 300,
-    "discord": {
-        "bot_token": "",
-        "channel_id": 0
-    },
-    "sites": []
-}
+SCRIPT_DIR  = Path(__file__).parent
+CONFIG_FILE = SCRIPT_DIR / "config.json"
+STATE_FILE  = SCRIPT_DIR / "state.json"
 
 
 # ── 유틸 ────────────────────────────────────────────────────────────────────
@@ -146,16 +122,10 @@ def detect_changes(old: dict, new: dict) -> dict | None:
     return {"new_links": new_links, "new_texts": new_texts}
 
 
-# ── Discord Embed 생성 ───────────────────────────────────────────────────────
+# ── Discord REST API ─────────────────────────────────────────────────────────
 
-def build_embed(site_name: str, url: str, changes: dict) -> discord.Embed:
-    embed = discord.Embed(
-        title=f"🔔 변경 감지: {site_name}",
-        url=url,
-        description=f"[{url}]({url})",
-        color=0x1a73e8,
-        timestamp=datetime.now()
-    )
+def build_embed(site_name: str, url: str, changes: dict) -> dict:
+    fields = []
 
     new_links = changes.get("new_links", [])
     new_texts = changes.get("new_texts", [])
@@ -169,204 +139,98 @@ def build_embed(site_name: str, url: str, changes: dict) -> discord.Embed:
             link_lines.append(f"{label} [{text[:60]}]({href})")
         if len(new_links) > 10:
             link_lines.append(f"... 외 {len(new_links) - 10}개")
-        embed.add_field(
-            name=f"새 링크 / 파일 ({len(new_links)}개)",
-            value="\n".join(link_lines),
-            inline=False
-        )
+        fields.append({
+            "name":   f"새 링크 / 파일 ({len(new_links)}개)",
+            "value":  "\n".join(link_lines),
+            "inline": False
+        })
 
     if new_texts:
         text_lines = [f"• {t[:80]}" for t in new_texts[:10]]
         if len(new_texts) > 10:
             text_lines.append(f"... 외 {len(new_texts) - 10}개")
-        embed.add_field(
-            name=f"새 텍스트 항목 ({len(new_texts)}개)",
-            value="\n".join(text_lines),
-            inline=False
-        )
+        fields.append({
+            "name":   f"새 텍스트 항목 ({len(new_texts)}개)",
+            "value":  "\n".join(text_lines),
+            "inline": False
+        })
 
-    embed.set_footer(text="Website Monitor")
-    return embed
+    return {
+        "title":       f"🔔 변경 감지: {site_name}",
+        "url":         url,
+        "description": f"[{url}]({url})",
+        "color":       0x1a73e8,
+        "fields":      fields,
+        "footer":      {"text": "Website Monitor"},
+        "timestamp":   datetime.now(timezone.utc).isoformat()
+    }
 
-
-# ── Discord 봇 ───────────────────────────────────────────────────────────────
-
-class MonitorBot(discord.Client):
-    def __init__(self, config: dict, state: dict):
-        intents = discord.Intents.default()
-        super().__init__(intents=intents)
-        self.config = config
-        self.state  = state
-        self.channel_id = int(config["discord"]["channel_id"])
-
-    async def on_ready(self):
-        print(f"[{ts()}] 봇 로그인: {self.user}  (id: {self.user.id})")
-        print(f"[{ts()}] 모니터 시작 | {len(self.config['sites'])}개 사이트 "
-              f"| {self.config['interval_seconds']}초 간격\n")
-        self.monitor_loop.change_interval(seconds=self.config["interval_seconds"])
-        self.monitor_loop.start()
-
-    @tasks.loop(seconds=300)   # on_ready에서 실제 간격으로 교체됨
-    async def monitor_loop(self):
-        channel = self.get_channel(self.channel_id)
-        if channel is None:
-            print(f"  [오류] 채널 ID {self.channel_id}를 찾을 수 없습니다.")
-            return
-
-        for site in self.config["sites"]:
-            url  = site["url"]
-            name = site.get("name", url)
-            print(f"[{ts()}] 확인: {name}")
-
-            html = await asyncio.get_event_loop().run_in_executor(None, fetch_html, url)
-            if html is None:
-                print()
-                continue
-
-            new_st = extract_state(html, url)
-            old_st = self.state.get(url)
-
-            if old_st is None:
-                print(f"  → 초기 저장 완료 "
-                      f"(링크 {len(new_st['links'])}개 / 텍스트 {len(new_st['texts'])}개)\n")
-                self.state[url] = new_st
-                save_json(STATE_FILE, self.state)
-                continue
-
-            changes = detect_changes(old_st, new_st)
-            if changes:
-                nl, nt = len(changes["new_links"]), len(changes["new_texts"])
-                print(f"  → 변경 감지! 새 링크 {nl}개 / 새 텍스트 {nt}개")
-                embed = build_embed(name, url, changes)
-                await channel.send(embed=embed)
-                self.state[url] = new_st
-                save_json(STATE_FILE, self.state)
-            else:
-                print(f"  → 변화 없음\n")
-
-        print(f"[{ts()}] 다음 체크까지 {self.config['interval_seconds']}초 대기...\n")
+def send_discord_message(token: str, channel_id: str, embed: dict):
+    url = f"https://discord.com/api/v10/channels/{channel_id}/messages"
+    headers = {
+        "Authorization": f"Bot {token}",
+        "Content-Type":  "application/json"
+    }
+    resp = requests.post(url, headers=headers, json={"embeds": [embed]})
+    if not resp.ok:
+        print(f"  [Discord 오류] {resp.status_code}: {resp.text}")
+    return resp.ok
 
 
-# ── 모니터 실행 ──────────────────────────────────────────────────────────────
-
-def run_monitor():
-    config = load_json(CONFIG_FILE, DEFAULT_CONFIG)
-    state  = load_json(STATE_FILE, {})
-
-    token      = config.get("discord", {}).get("bot_token", "")
-    channel_id = config.get("discord", {}).get("channel_id", 0)
-
-    if not token:
-        print("봇 토큰이 설정되지 않았습니다.")
-        print(f"  python {Path(__file__).name} bot-setup\n")
-        return
-    if not channel_id:
-        print("채널 ID가 설정되지 않았습니다.")
-        print(f"  python {Path(__file__).name} bot-setup\n")
-        return
-    if not config["sites"]:
-        print("등록된 사이트가 없습니다.")
-        print(f"  python {Path(__file__).name} add <URL> <이름>\n")
-        return
-
-    bot = MonitorBot(config, state)
-    bot.run(token)
-
-
-# ── CLI ──────────────────────────────────────────────────────────────────────
-
-def cmd_bot_setup():
-    config = load_json(CONFIG_FILE, DEFAULT_CONFIG)
-    if "discord" not in config:
-        config["discord"] = {"bot_token": "", "channel_id": 0}
-
-    print("\n" + "=" * 60)
-    print("  Discord 봇 설정")
-    print("  1. https://discord.com/developers/applications 에서 봇 생성")
-    print("  2. Bot 탭 → Token 복사")
-    print("  3. 알림 보낼 채널에서 채널 ID 복사 (개발자 모드 필요)")
-    print("=" * 60)
-
-    config["discord"]["bot_token"]  = input("봇 Token: ").strip()
-    config["discord"]["channel_id"] = int(input("채널 ID: ").strip())
-    save_json(CONFIG_FILE, config)
-    print("\n설정 저장 완료.")
-
-def cmd_add(args):
-    if len(args) < 2:
-        print("사용법: add <URL> <이름>")
-        return
-    config = load_json(CONFIG_FILE, DEFAULT_CONFIG)
-    config["sites"].append({"url": args[0], "name": args[1]})
-    save_json(CONFIG_FILE, config)
-    print(f"추가됨: {args[1]}  ({args[0]})")
-
-def cmd_remove(args):
-    if not args:
-        print("사용법: remove <URL 또는 이름>")
-        return
-    key    = args[0]
-    config = load_json(CONFIG_FILE, DEFAULT_CONFIG)
-    before = len(config["sites"])
-    config["sites"] = [s for s in config["sites"]
-                       if s["url"] != key and s.get("name") != key]
-    save_json(CONFIG_FILE, config)
-    print(f"{before - len(config['sites'])}개 제거됨")
-
-def cmd_list():
-    config = load_json(CONFIG_FILE, DEFAULT_CONFIG)
-    dc     = config.get("discord", {})
-    token  = dc.get("bot_token", "")
-    masked = (token[:20] + "...") if len(token) > 20 else (token or "(미설정)")
-    ch_id  = dc.get("channel_id", 0) or "(미설정)"
-    print(f"\n[Discord 봇 설정]")
-    print(f"  토큰:      {masked}")
-    print(f"  채널 ID:   {ch_id}")
-    print(f"\n[모니터링 사이트]  체크 간격: {config['interval_seconds']}초")
-    for i, s in enumerate(config["sites"], 1):
-        print(f"  {i}. {s['name']}  {s['url']}")
-    if not config["sites"]:
-        print("  없음")
-    print()
-
-def cmd_interval(args):
-    config = load_json(CONFIG_FILE, DEFAULT_CONFIG)
-    if not args:
-        print(f"현재 간격: {config['interval_seconds']}초")
-        return
-    config["interval_seconds"] = int(args[0])
-    save_json(CONFIG_FILE, config)
-    print(f"체크 간격 → {args[0]}초")
-
-def cmd_reset():
-    STATE_FILE.unlink(missing_ok=True)
-    print("상태 초기화 완료 (다음 실행 시 현재 상태를 기준점으로 재저장)")
-
-HELP = """
-Website Monitor (Discord 봇) — 명령어 목록
-────────────────────────────────────────────────────
-python website_monitor.py                     봇 시작 (모니터링)
-python website_monitor.py bot-setup           봇 토큰 / 채널 ID 설정
-python website_monitor.py add <URL> <이름>    사이트 추가
-python website_monitor.py remove <URL|이름>   사이트 제거
-python website_monitor.py list                목록 및 설정 확인
-python website_monitor.py interval <초>       체크 간격 설정
-python website_monitor.py reset               저장 상태 초기화
-python website_monitor.py help                도움말
-"""
+# ── 메인 ────────────────────────────────────────────────────────────────────
 
 def main():
-    args = sys.argv[1:]
-    cmd  = args[0] if args else "run"
-    match cmd:
-        case "bot-setup":  cmd_bot_setup()
-        case "add":        cmd_add(args[1:])
-        case "remove":     cmd_remove(args[1:])
-        case "list":       cmd_list()
-        case "interval":   cmd_interval(args[1:])
-        case "reset":      cmd_reset()
-        case "help":       print(HELP)
-        case _:            run_monitor()
+    token      = os.environ.get("DISCORD_BOT_TOKEN", "")
+    channel_id = os.environ.get("DISCORD_CHANNEL_ID", "")
+
+    if not token or not channel_id:
+        print("[오류] 환경변수 DISCORD_BOT_TOKEN, DISCORD_CHANNEL_ID 가 필요합니다.")
+        sys.exit(1)
+
+    config = load_json(CONFIG_FILE, {"sites": []})
+    state  = load_json(STATE_FILE, {})
+
+    sites = config.get("sites", [])
+    if not sites:
+        print("[오류] config.json 에 사이트가 없습니다.")
+        sys.exit(1)
+
+    state_changed = False
+
+    for site in sites:
+        url  = site["url"]
+        name = site.get("name", url)
+        print(f"[{ts()}] 확인: {name}")
+
+        html = fetch_html(url)
+        if html is None:
+            print()
+            continue
+
+        new_st = extract_state(html, url)
+        old_st = state.get(url)
+
+        if old_st is None:
+            print(f"  → 초기 저장 완료 "
+                  f"(링크 {len(new_st['links'])}개 / 텍스트 {len(new_st['texts'])}개)\n")
+            state[url] = new_st
+            state_changed = True
+            continue
+
+        changes = detect_changes(old_st, new_st)
+        if changes:
+            nl, nt = len(changes["new_links"]), len(changes["new_texts"])
+            print(f"  → 변경 감지! 새 링크 {nl}개 / 새 텍스트 {nt}개")
+            embed = build_embed(name, url, changes)
+            if send_discord_message(token, channel_id, embed):
+                state[url] = new_st
+                state_changed = True
+        else:
+            print(f"  → 변화 없음\n")
+
+    if state_changed:
+        save_json(STATE_FILE, state)
+        print(f"[{ts()}] state.json 저장 완료")
 
 if __name__ == "__main__":
     main()

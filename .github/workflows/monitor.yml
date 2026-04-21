@@ -1,0 +1,40 @@
+name: Website Monitor
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'   # 5분마다 실행
+  workflow_dispatch:          # 수동 실행 버튼
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write         # state.json 커밋 권한
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: discord/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r discord/requirements.txt
+
+      - name: Run monitor
+        env:
+          DISCORD_BOT_TOKEN:  ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_CHANNEL_ID: '1205322411340341288'
+        run: python discord/website_monitor.py
+
+      - name: Save state
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add discord/state.json
+          git diff --staged --quiet || git commit -m "chore: update monitor state"
+          git push

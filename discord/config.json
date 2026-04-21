@@ -1,0 +1,9 @@
+{
+  "interval_seconds": 300,
+  "sites": [
+    {
+      "url": "https://cslab.cbnu.ac.kr/class.php?sem=2026.1&id=os",
+      "name": "CSLAB OS"
+    }
+  ]
+}
