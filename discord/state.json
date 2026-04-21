@@ -1,1 +1,102 @@
-{}
+{
+  "https://cslab.cbnu.ac.kr/class.php?sem=2026.1&id=os": {
+    "link_hrefs": [
+      "https://cslab.cbnu.ac.kr/",
+      "https://cslab.cbnu.ac.kr/member.php",
+      "https://cslab.cbnu.ac.kr/libfaq.php",
+      "https://github.com/cslabcbnu",
+      "http://overlatex.com",
+      "https://cslab.cbnu.ac.kr/research.php",
+      "https://cslab.cbnu.ac.kr/publication.php",
+      "https://cslab.cbnu.ac.kr/class.php?sem=2026.1&id=os",
+      "https://cslab.cbnu.ac.kr/class.php?sem=2026.1&id=ca",
+      "https://cslab.cbnu.ac.kr/class.php?sem=2026.1&id=cd1",
+      "https://cslab.cbnu.ac.kr/board/adm/visit_date.php",
+      "https://cslab.cbnu.ac.kr/board/bbs/login.php?url=/class.php",
+      "http://cslab.cbnu.ac.kr:8081/monitorix"
+    ],
+    "links": [
+      {
+        "href": "https://cslab.cbnu.ac.kr/",
+        "text": "",
+        "is_file": false
+      },
+      {
+        "href": "https://cslab.cbnu.ac.kr/member.php",
+        "text": "Contact",
+        "is_file": false
+      },
+      {
+        "href": "https://cslab.cbnu.ac.kr/libfaq.php",
+        "text": "libfaq",
+        "is_file": false
+      },
+      {
+        "href": "https://github.com/cslabcbnu",
+        "text": "github(cslab)",
+        "is_file": false
+      },
+      {
+        "href": "http://overlatex.com",
+        "text": "overlatex.com(Underleaf)",
+        "is_file": false
+      },
+      {
+        "href": "https://cslab.cbnu.ac.kr/research.php",
+        "text": "Research",
+        "is_file": false
+      },
+      {
+        "href": "https://cslab.cbnu.ac.kr/publication.php",
+        "text": "Publication",
+        "is_file": false
+      },
+      {
+        "href": "https://cslab.cbnu.ac.kr/class.php?sem=2026.1&id=os",
+        "text": "Operating systems",
+        "is_file": false
+      },
+      {
+        "href": "https://cslab.cbnu.ac.kr/class.php?sem=2026.1&id=ca",
+        "text": "Computer architecture",
+        "is_file": false
+      },
+      {
+        "href": "https://cslab.cbnu.ac.kr/class.php?sem=2026.1&id=cd1",
+        "text": "Capstone design 1",
+        "is_file": false
+      },
+      {
+        "href": "https://cslab.cbnu.ac.kr/board/adm/visit_date.php",
+        "text": "C",
+        "is_file": false
+      },
+      {
+        "href": "https://cslab.cbnu.ac.kr/board/bbs/login.php?url=/class.php",
+        "text": "t",
+        "is_file": false
+      },
+      {
+        "href": "http://cslab.cbnu.ac.kr:8081/monitorix",
+        "text": ".",
+        "is_file": false
+      }
+    ],
+    "texts": [
+      "HomeContactlibfaqgithub(cslab)overlatex.com(Underleaf)ResearchMemberPublicationCourse(Spring, 2026)Operating systemsComputer architectureCapstone design 1",
+      "Contact",
+      "libfaq",
+      "github(cslab)",
+      "overlatex.com(Underleaf)",
+      "ResearchMemberPublicationCourse(Spring, 2026)Operating systemsComputer architectureCapstone design 1",
+      "Research",
+      "Member",
+      "Publication",
+      "Course(Spring, 2026)",
+      "Operating systems",
+      "Computer architecture",
+      "Capstone design 1"
+    ],
+    "page_hash": "d165b8b9660b9eb0ccafd1a45366c414cd488bf31b66bd856f9d3a06442b13ee"
+  }
+}
