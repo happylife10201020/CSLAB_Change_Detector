@@ -41,6 +41,8 @@ jobs:
           git diff --staged --quiet && exit 0
           git commit -m "chore: update monitor state"
           for i in 1 2 3 4 5; do
-            git pull --rebase && git push && break
+            if git pull --rebase && git push; then
+              break
+            fi
             sleep $((i * 2))
           done
